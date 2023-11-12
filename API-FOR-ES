@@ -1,0 +1,706 @@
+es环境
+ Elasticsearch security features have been automatically configured!
+✅ Authentication is enabled and cluster connections are encrypted.
+
+ℹ️  Password for the elastic user (reset with `bin/elasticsearch-reset-password -u elastic`):
+  GrhwfN9VKaFLeZ2BkOsX
+
+ℹ️  HTTP CA certificate SHA-256 fingerprint:
+  2fbb903247193380bd40d90ced3d2aaccf873bda9e443e2f219e747eb65a5bd0
+
+ℹ️  Configure Kibana to use this cluster:
+• Run Kibana and click the configuration link in the terminal when Kibana starts.
+• Copy the following enrollment token and paste it into Kibana in your browser (valid for the next 30 minutes):
+  eyJ2ZXIiOiI4LjEuMyIsImFkciI6WyIxNzIuMjguMjA1LjExNzo5MjAwIl0sImZnciI6IjJmYmI5MDMyNDcxOTMzODBiZDQwZDkwY2VkM2QyYWFjY2Y4NzNiZGE5ZTQ0M2UyZjIxOWU3NDdlYjY1YTViZDAiLCJrZXkiOiJNUGxPMElvQjlmSWlkeHFxal9ZeTpkaFY5eGQxelJDZTZQNU9MT1lJUE1nIn0=
+
+ℹ️  Configure other nodes to join this cluster:
+• On this node:
+  ⁃ Create an enrollment token with `bin/elasticsearch-create-enrollment-token -s node`.
+  ⁃ Uncomment the transport.host setting at the end of config/elasticsearch.yml.
+  ⁃ Restart Elasticsearch.
+• On other nodes:
+  ⁃ Start Elasticsearch with `bin/elasticsearch --enrollment-token <token>`, using the enrollment token that you generated.
+>
+
+
+首先是新增索引api
+
+put /索引名称
+put /索引名称
+{
+    "settings":{
+     "number_of_replicas":"5"   /** 这里我就能设置一些静态变量 **/
+    }
+}
+
+(Required, string) Name of the index you wish to create.
+
+Index names must meet the following criteria:
+
+Lowercase only 只支持小写
+Cannot include \, /, *, ?, ", <, >, |, ` ` (space character), ,, #  特殊字符
+Indices prior to 7.0 could contain a colon (:), but that’s been deprecated and won’t be supported in 7.0+
+Cannot start with -, _, +  不能以这些东西开头
+Cannot be . or ..  
+Cannot be longer than 255 bytes (note it is bytes, so multi-byte characters will count towards the 255 limit faster)
+Names starting with . are deprecated, except for hidden indices and internal indices managed by plugins
+
+>"Most APIs that accept an index or index alias argument support date math."
+
+在创建和查询索引的时候,可以通过固定的格式在索引名称后加上时间
+例如:
+PUT <timestamp{now{yyyy-MM-dd_HH-mm-ss}}>
+返回值
+{
+  "acknowledged": true,
+  "shards_acknowledged": true,
+  "index": "timestamp2023-10-03_13-23-21"
+}
+
+
+请求参数
+wait_for_active_shards （可选，字符串）在操作执行之前必须活动的分片复制数量。设置为 all 或任何正整数，最大值为索引分片总数（number_of_replicas+1） 默认为：1
+master_timeout （可选，时间单位）等待连接到主节点的时间。如果在超时过期前没有收到响应，则请求失败并返回错误。默认为 30s。
+timeout （可选，时间单位）等待响应的时间。如果在超时过期之前没有收到响应，则请求失败并返回错误。默认为 30s。
+
+这三个是示例给的，因为请求是restful风格的，很容易试出结果
+put /test_index_params?master_timeout=20s  
+返回值：
+{
+	"acknowledged": true,
+	"shards_acknowledged": true,
+	"index": "test_index_params"
+}
+
+请求体
+aliases （可选，别名对象）包含索引的索引别名。参阅批量索引别名。
+ES中可以为索引添加别名，一个别名可以指向到多个索引中，同时在添加别名时可以设置筛选条件，指向一个索引的部分数据
+
+mappings （可选，映射对象）索引中字段映射。如果指定，映射可以包含：
+字段名字
+字段数据类型
+映射参数
+
+settings （可选，索引设置对象）索引的配置选项。
+官方示例：
+PUT /my-index-000001
+{
+  "settings": {
+    "index": {
+      "number_of_shards": 3,  
+      "number_of_replicas": 2
+    }
+  }
+}
+
+put /my-index-000002
+{
+    "aliases":{  /**别名组，可以设置多个索引别名**、
+        "索引验证":{},/**第一个索引别名 **/
+        "test":{/**第二个**/
+            "filter":{
+                "term":{
+                    "you konw":"for search"
+                }
+            }
+        }
+    }
+}
+
+
+PUT /test
+{
+  "settings": {
+    "number_of_shards": 1
+  },
+  "mappings": {
+    "properties": {
+      "field1": { "type": "text" }
+    }
+  }
+}
+---------------------------------------------------------------------------------------------------
+修改index settings
+
+PUT /<target>/_settings
+
+请求参数
+flat_settings 将返回值的缩进结构平整化,默认为false
+ignore_unavailable 如果为false ,遇到找不到的索引或者已经关闭的索引,就会报错error
+preserve_existing 如果为true,那么对于已经在索引中存在的settings就不会做修改
+
+
+settings专讲
+索引的settings分为静态和动态
+静态(static)
+They can only be set at index creation time or on a closed index.
+动态(dynamic)
+They can be changed on a live index using the update-index-settings API.
+
+>Static index settings
+>>index.number_of_shards 主分片数量,不可修改
+>>index.number_of_routing_shards 分片拆分路由参数,是主分片数*2^n
+>>index.codec 默认使用LZ4压缩方式存储数据，也可以设置为 best_compression，它使用 DEFLATE 方式以牺牲字段存储性能为代价来获得更高的压缩比例。
+>>index.soft_deletes.enabled 是否开启软性删除 已弃用
+>>index.soft_deletes.retention_lease.period 设置分片的历史记录保留时间，确保在合并 Lucene 索引期间保留软删除，默认为12h。
+>>index.shard.check_on_startup 设置确定 Elasticsearch 在打开分片时是否执行额外的完整性检查。如果这些检查检测到损坏，则它们将阻止打开分片。 相关的取值如下：false	打开分片时不要执行额外的损坏检查，这是默认和推荐的行为;checksum	验证分片中每个文件的校验和是否与其内容匹配;true 检查物理损坏和逻辑损坏。这是一个昂贵的操作，很耗 CPU 和内存
+以上这些配置不能通过update settings api 更改
+
+>dynamic index settings
+参数                                      说明
+index.number_of_replicas	                每个主分片具有的副本数，默认为 1
+index.auto_expand_replicas                根据集群中的数据节点数量自动扩展副本数量，默认为false
+index.search.idle.after                   分片在被视为搜索空闲之前无法接收搜索或获取请求的时间。（默认为30s）
+
+---------------------------------------------------------------------------------------------------
+更新和创建索引别名比较简单
+POST <target>/_alias/<alias>
+
+POST <target>/_aliases/<alias>
+
+PUT <target>/_alias/<alias>
+
+PUT <target>/_aliases/<alias>
+
+经过验证，所有的api都是新增了一个别名在别名组内（没想到更新索引别名的意思是更新索引中aliases字段内容）
+
+---------------------------------------------------------------------------------------------------
+判断索引别名是否存在
+
+HEAD _alias/<别名名称>
+
+存在就返回200,
+不存在就返回404
+{
+  "error": "alias [test1] missing",
+  "status": 404
+}
+---------------------------------------------------------------------------------------------------
+管理一个或多个别名
+POST _aliases
+
+请求体
+actions
+(Required, array of objects) Actions to perform.数组类型,可进行多个操作
+    <action> 操作类型
+	add
+        Adds a data stream or index to an alias. If the alias doesn’t exist, the add action creates it.(在多个或一个索引下添加别名)
+		如果索引存在则返回200,不存在就返回404,下面删除操作也是如此
+    remove
+        Removes a data stream or index from an alias.(在多个或一个索引下删除别名)
+    remove_index
+        Deletes an index. You cannot use this action on aliases or data streams.(删除索引)
+	    <action> 操作类型内容
+		   alias  (Required*, string) Alias for the action. Index alias names support date math. If aliases is not specified, the add and remove actions require this parameter. For the remove action, this parameter supports wildcards (*). The remove_index action doesn’t support this parameter.
+           aliases  (Required*, array of strings) Aliases for the action. Index alias names support date math. If alias is not specified, the add and remove actions require this parameter. For the remove action, this parameter supports wildcards (*). The remove_index action doesn’t support this parameter.
+	       (这俩参数是对关于alias的操作,add以及remove)
+		   index  (Required*, string) Data stream or index for the action. Supports wildcards (*). If indices is not specified, this parameter is required. For the add and remove_index actions, wildcard patterns that match both data streams and indices return an error.
+           indices  (Required*, array of strings) Data streams or indices for the action. Supports wildcards (*). If index is not specified, this parameter is required. For the add and remove_index actions, wildcard patterns that match both data streams and indices return an error.
+           (这俩参数是对关于索引的操作,remove_index)
+
+---------------------------------------------------------------------------------------------------
+
+更新索引就要分为两种
+
+第一种更新叫做组件模板更新
+第二种更新叫做索引模板更新
+
+索引模板包含多个组件模板，组件模板包括索引中别名、设置、映射mappings，索引模板定义之后可以通过其创建新的索引
+“Creates or updates a component template（组件模板）. Component templates are building blocks for constructing index templates that specify index mappings, settings, and aliases.
+Creates or updates an index template（索引模板）. Index templates define settings, mappings, and aliases that can be applied automatically to new indices.”
+
+创建修改组件模板
+PUT /_component_template/<component-template>
+一看就是请求体中包含很多字段
+
+
+创建和更新模板
+在介绍索引模板之前，先了解组件模板，组件模板是索引模板的构建块，其中包含映射、设置和别名，也就是上文中创建索引中请求体部分；
+索引模板就是多个组件模板集合，可以自动创建新的索引的模板，关于索引模板对于组件模板的优先级排序按下不表
+
+
+组件模板
+PUT /_component_template/<component-template>
+
+请求参数
+create（默认为false）是否是创建模式，请求不会覆盖或更新已有组件模板
+PUT /_component_template/test_index?create=true
+{
+    "template":{
+        "aliases":{
+            "template_alias":{}
+        }
+    }
+}
+如果模板已经存在，则返回
+{
+	"error": {
+		"root_cause": [
+			{
+				"type": "illegal_argument_exception",
+				"reason": "component template [test_component_template] already exists"
+			}
+		],
+		"type": "illegal_argument_exception",
+		"reason": "component template [test_component_template] already exists"
+	},
+	"status": 400
+}
+
+请求体
+template
+
+（必需，对象）将应用的模板，可包括映射（mappings）、设置（settings）或别名（aliases）配置。
+
+template 属性
+   aliases
+
+   （可选，对象）索引的别名。如果索引模板包含数据流(data_stream)，此参数不支持。
+
+   aliases 对象属性
+      <alias>
+
+      （必需，对象）键为别名名字。支持日期数学。 对象体包含别名的选项。支持空对象。
+
+      <alias> 属性
+         filter
+
+         （可选，查询 DSL 对象）用于限制别名查询时可以访问的文档。
+
+         index_routing
+
+         （可选，字符串）用于将索引操作路由到特定分片的值。如果指定，这将覆盖索引操作的路由值。
+
+         is_hidden
+
+         （可选，布尔值）如果为 true，别名是隐藏的。默认为 false。别名所有的索引必须有相同的 is_hidden 值。
+
+         is_write_index
+
+         （可选，布尔值）如果为 true，索引是别名的写索引。默认为false。
+
+         routing
+
+         （可选，字符串）用于将索引和搜索操作路由到特定分片的值。
+
+         search_routing
+
+         （可选，字符串）用于将搜索操作路由到特定分片的值。如果指定，这将覆盖搜索操作的 routing 值。
+
+         mappings
+
+         （可选，映射对象）索引中字段的映射。如果指定，此映射可以包括：
+
+            字段名字
+            字段数据类型
+            映射参数
+            参阅映射。
+
+   settings （可选，索引设置对象）索引配置选项。参阅索引设置。
+
+version
+
+（可选，整数）用于显式管理组件模板的版本号。Elasticsearch 不会自动生成或增加此数字。
+
+allow_auto_create
+
+（可选，布尔值）此设置覆盖了集群设置中的 action.auto_create_index 的值。如果在模板中设置为 true，即使通过 actions.auto_create_index 禁用了自动创建索引，索引也能通过这个模板自动创建。如果设置为 false，匹配模板的索引或数据流必须被显示创建，且可能永远不会被自动创建。
+
+_meta
+
+（可选，对象）可选的有关组件模板的用户元数据。可以有任何内容。Elasticsearch 不会自动生成此内容
+
+应用组件模板
+不能直接应用组件模板，需要在索引模板中使用
+
+
+
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+索引模板
+PUT /_index_template/<index_template>
+
+查询参数
+create（可选，布尔值）如果为 true，此请求不会替代或更新已有的索引模板。默认为 false。
+
+请求体
+composed_of （可选，字符串数组）一个组件模板名称的有序列表。组件模板按指定的顺序合并，这意味着最后指定的组件模板具有最高的优先级。
+
+data_stream
+
+（可选，对象）如果这个对象被包含了，那么这个模板将会用于创建数据流和他们的备份索引。支持一个空对象。
+
+数据流必须有 data_stream 对象来匹配索引模板。参阅创建索引模板。
+
+   data_stream 属性
+
+      hidden（可选，字符串）如果为 true，数据流是隐藏的。默认为 false。
+
+index_patterns（必需的，字符串数组）用于在创建时匹配数据流和索引名字的通配符（*）表达式数组。
+
+Elasticsearch 包含几个内置的索引模板。为了避免这些模板的命名冲突，参阅避免索引模式冲突。
+
+_meta
+
+（可选，对象）关于索引模板的可选用户元数据。可以有任意内容。Elasticsearch 不会自动生成此信息。
+
+priority
+
+（可选，整数）用于在创建新数据流或索引时确定索引模板的优先级。具有最高优先级的索引模板先被选择。如果未指定优先级，则将模板视为优先级为 0（最低优先级）。Elasticsearch 不会自动生成此值。
+
+template
+
+（可选，对象）要应用的模板。它可以选择包括别名、映射或设置配置。
+
+   template 属性
+
+      aliases（可选，对象）索引的别名。如果索引模板包含了 data_stream，此参数不被支持。
+
+      aliases 对象属性
+
+         <alias>（必需，对象）键值是别名名称。支持日期数学。对象体包含别名的选项。支持空对象。
+
+         <alias> 属性
+
+            filter（可选，查询 DSL 对象）用于限制别名查询时可以访问的文档。
+
+            index_routing（可选，字符串）用于将索引操作路由到特定分片的值。如果指定，这将覆盖索引操作的路由值。
+
+            is_hidden（可选，布尔值）如果为 true，别名是隐藏的。默认为 false。别名所有的索引必须有相同的 is_hidden 值。
+
+            is_write_index（可选，布尔值）如果为 true，索引是别名的写索引。默认为 false。
+
+            routing（可选，字符串）用于将索引和搜索操作路由到特定分片的值。
+
+            search_routing（可选，字符串）用于将搜索操作路由到特定分片的值。如果指定，这将覆盖搜索操作的 routing 值。
+
+      mappings（可选，映射对象）索引中字段的映射。
+
+      settings （可选，索引设置对象）索引的配置索引。参阅索引设置。
+
+version（可选，整数）用于外部管理索引模板的版本号。Elasticsearch 不会自动生成此值
+
+------------------------------------------------------------------------------------------------------------------------------------------------------------------
+删除组件模板
+DELETE /_component_template/<component-template>
+
+获取组件模板
+GET  /_component_template/<component-template> 获取指定模板信息
+GET  /_component_template 获取所有组件模板
+
+------------------------------------------------------------------------------------------------------------------------------------------------------------------
+今天开始还是先从索引的api开始学习
+续接上文的创建索引
+------------------------------------------------------------------------------------------------------------------------------------------------------------------
+索引管理
+
+删除索引
+DELETE /<index_name>
+
+待删除的索引的逗号分隔列表或通配符表达式。例如foo*,bar*
+在这个参数中，通配符表达式只能匹配开启、具体的索引。你不能通过别名删除索引。
+为了删除所有索引，使用 _all 或 *。为了禁止使用 _all 或通配符表达式删除索引，修改 action.destructive_requires_name 集群设置为 true。你可以在 elasticsearch.yml 文件中或通过集群更新 API 更新设置。
+
+
+查询参数
+allow_no_indices  如果是false ，那么如果通配符没有任何匹配的索引就会报错
+
+DELETE MAGA*?allow_no_indices=false
+
+返回值
+{
+	"error": {
+		"root_cause": [
+			{
+				"type": "illegal_argument_exception",
+				"reason": "Wildcard expressions or all indices are not allowed"
+			}
+		],
+		"type": "illegal_argument_exception",
+		"reason": "Wildcard expressions or all indices are not allowed"
+	},
+	"status": 400
+}
+>>>>>>>>>>>>>>这是个坑吗，不支持通配符，只能先默认删除索引的参数是索引名称了
+
+>>>>>>>>>>>>>>解决方法，好像也没啥用，我估计方法应该要更复杂一点
+为了禁用允许通过通配符或 _all 删除索引，请将配置中的 action.destructive_requires_namesetting 设置为 true。也可以通过集群更新设置 api 更改此设置。
+
+PUT /_cluster/settings
+{
+  "transient": {
+  "action.destructive_requires_name": true
+
+  }
+}
+
+返回值
+
+{
+	"acknowledged": true,
+	"persistent": {},
+	"transient": {
+		"action": {
+			"destructive_requires_name": "true"
+		}
+	}
+}
+
+
+
+------------------------------------------------------------------------------------------------------------------------------------------------------------------
+获取索引
+GET /index_name
+
+示例
+GET /test_index
+
+返回值
+{
+	"test_index": {
+		"aliases": {},
+		"mappings": {},
+		"settings": {
+			"index": {
+				"routing": {
+					"allocation": {
+						"include": {
+							"_tier_preference": "data_content"
+						}
+					}
+				},
+				"number_of_shards": "1",
+				"provided_name": "test_index",
+				"creation_date": "1691502077908",
+				"number_of_replicas": "5",
+				"uuid": "mkBQWPwRT2yGwCLXcoa6Rg",
+				"version": {
+					"created": "8090099"
+				}
+			}
+		}
+	}
+}
+
+查询参数
+allow_no_indices
+（可选，布尔值）如果为 false，如果任何通配符表达式、索引别名或 _all 值只针对丢失或关闭的索引，则请求返回一个错误。即使请求以其他开放索引为目标，此行为也适用。例如，如果一个索引以 foo 开头，但没有索引以 bar 开头，以 foo*,bar* 为目标的请求将返回错误。
+ 默认为 true。
+
+flat_settings
+（可选，布尔值）如果为 true，以平面格式返回设置。默认为 false。 就是把多层的json格式变成对齐的格式
+{
+	"test_index": {
+		"aliases": {},
+		"mappings": {},
+		"settings": {
+			"index.creation_date": "1691502077908",
+			"index.number_of_replicas": "5",
+			"index.number_of_shards": "1",
+			"index.provided_name": "test_index",
+			"index.routing.allocation.include._tier_preference": "data_content",
+			"index.uuid": "mkBQWPwRT2yGwCLXcoa6Rg",
+			"index.version.created": "8090099"
+		}
+	}
+}
+
+include_defaults
+（可选，布尔值）如果为 true，返回索引所有的默认选项，太长了就不给示例了
+
+ignore_unavailable
+（可选，布尔值）如果为 false，无法找到的索引会报错
+{
+	"error": {
+		"root_cause": [
+			{
+				"type": "index_not_found_exception",
+				"reason": "no such index [teat_index]",
+				"resource.type": "index_or_alias",
+				"resource.id": "teat_index",
+				"index_uuid": "_na_",
+				"index": "teat_index"
+			}
+		],
+		"type": "index_not_found_exception",
+		"reason": "no such index [teat_index]",
+		"resource.type": "index_or_alias",
+		"resource.id": "teat_index",
+		"index_uuid": "_na_",
+		"index": "teat_index"
+	},
+	"status": 404
+}
+
+添加后返回值为200，内容为空
+
+local
+（可选，布尔值）如果为 true，请求只从本地节点检索信息。默认为 false，意味着从主节点检索信息。
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------
+索引存在
+HEAD /<index_name>
+
+和删除索引的参数一样
+返回值只有两种
+404不存在
+200存在
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------
+关闭索引
+POST /<index_name>/_close
+
+你使用关闭索引 API 来关闭开启的索引。
+关闭的索引被阻止进行读/写操作，并且不允许开启的索引允许的所有操作。在关闭的索引中不能索引文档或搜索文档。这允许关闭的索引不必维护索引或搜索文档的内部数据结构，以减少集群的开销。
+当打开或关闭索引时，主节点负责重新启动索引分片以反映索引的新状态。分片将经过正常的恢复过程。打开的/关闭的索引数据由集群自动复制，以确保始终安全地保留足够的分片副本。
+你可以打开和关闭多个索引。如果请求显示引用缺失的索引，会抛出错误。这个行为可以通用 ignore_unavailable=true 参数禁用。
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------
+开启索引
+POST /<index_name>/_open
+
+你可以使用开启索引 API 重新打开关闭的索引。如果请求目标是数据流，请求重新打开任何数据流关闭的后备索引。
+关闭的索引被阻止进行读/写操作，也不允许开启的索引允许的所有操作。在关闭的索引中无法索引文档或搜索文档。这允许关闭的索引不必维护索引或搜索文档的内部数据结构，以减少集群的开销。
+当打开或关闭索引时，主节点负责重新启动索引分片以反映索引的新状态。分片将经过正常的恢复过程。打开的/关闭的索引数据由集群自动复制，以确保始终安全地保留足够的分片副本。
+你可以打开和关闭多个索引。如果请求显示引用缺失的索引，会抛出错误。这个行为可以通用 ignore_unavailable=true 参数禁用。
+所有索引可以通过 _all 作为索引名字或指定标识所有索引模式（如 *）来一次打开或关闭。
+在配置文件中通过设置 action.destructive_requires_name 标识为 true，可以禁用通过通配符或 _all 来定义所有索引。这个设置也可以通过集群更新设置 API 来修改。
+关闭的索引会消耗显著数量的硬盘空间，这在托管环境中可能会造成问题。通过集群设置 API 将 cluster.indices.close.enable 设置为 false，可以禁用关闭索引。默认值为 true。
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------
+收缩索引
+POST /<index_name>/_shrink/<target_index_name>
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------
+索引分析
+也就是elasticsearch自带的分词器
+
+Elasticsearch 因為是使用反向索引，所以會在建立 Document 時將句子拆開來以建立反向索引。而這個拆分的過程就是由分析器所執行的，分析器主要由三個部分所組成 :
+Character Filters (字符過濾器) 字符過濾器用於對字串先進行預處理，也就是會先整理這些字串。例如，去除 html 標籤或是將 & 轉換成 and。
+Tokenizer (分詞器) 分詞器會將處理過的字串進行分詞，也就是將字串拆分成單詞。
+Token Filter (單詞過濾器) 經過分詞後，單詞在經過單詞過濾器時可能會被改變，例如，大寫換成小寫、刪除無用的單詞 (a、and、the 等等) 或是新增單詞 (harmful、detrimental 這種同義詞)。
+
+內建的分析器
+>>Standard Analyzer (標準分析器) 標準分析器是 Elasticsearch 默認使用的分析器，他會根據 Unicode 所定義的單詞邊界來劃分字串，並刪除大部分的標點符號。最後再將所有單詞轉換成小寫。標準分析器也可以指定要過濾的字(Stop Words)。
+
+範例
+輸入的內容 :
+3. Semi-formal, as the name implies, is slightly more relaxed.
+
+經過標準分析器後會產生 :
+3、semi、formal、as、the、name、implies、is、slightly、more、relaxed
+
+>>Simple Analyzer (簡單分析器) 簡單分析器會在任何不是字母的地方劃分單詞，再將單詞轉成小寫。
+
+範例
+同樣使用標準分析器範例所輸入的內容，經過簡單分析器後會產生 :
+semi、formal、as、the、name、implies、is、slightly、more、relaxed
+
+可以發現數字 3 不見了，因為他不是字母。
+
+>>Whitespace Analyzer (空格分析器) 空格分析器會在空格的地方劃分單詞。
+
+範例
+同樣使用標準分析器範例所輸入的內容，經過空格分析器後會產生 :
+3.、Semi-formal,、as、the、name、implies,、is、slightly、more、relaxed.
+
+可以發現 semi-formal 因為中間不是空格，所以不會被劃分成兩個單詞。
+
+>>Stop Analyzer (停用詞分析器) 停用詞分析器基本上有和簡單分析器一樣的功能。此外他還會過濾掉停用詞，預設是英文的修飾詞，例如， a、the、is 等等。
+
+同樣使用標準分析器範例所輸入的內容，經過停用詞分析器後會產生 :
+semi、formal、name、implies、slightly、relaxed
+
+可以發現有許多單詞已經被過濾掉了。除了預設的停用詞過濾，也可以自己指定要過濾的單詞。
+
+>>Keyword Analyzer (關鍵字分析器) 關鍵字分析器不會進行分詞，會直接將輸入當作一個單詞。也就是說以標準分析器的範例輸入內容來說，3. Semi-formal, as the name implies, is slightly more relaxed. 整段不會被分開。
+
+這個在 Elasticsearch (二) - 快速搭建與 Document 的建立、更新和刪除 中，介紹 Mapping 有提到過。如果是沒有先定義 Mapping 直接加入 Document 的話，Elasticsearch 會自動多加一個 Field，這個 Field 就會定義成 Keyword，也就是搜尋時要完全符合。
+
+>>Language Analyzer (語言分析器) 語言分析器會根據指定的語言進行分詞，Elasticsearch 目前支援的還沒有中文。
+
+同樣使用標準分析器範例所輸入的內容，經過英文的語言分析器後會產生 :
+3、semi、formal、name、impli、slightli、more、relax
+
+GET /_analyze
+
+POST /_analyze
+
+GET /<index>/_analyze
+
+POST /<index>/_analyze
+
+示例:
+Get /_analyze
+{
+  "analyzer":"分析器类型",
+  "text":"自己写一段文字"
+}
+
+当然,也可以直接使用index中设定好的分析器去分析
+Get /<index_name>/_analyze
+{
+  "field":"字段名称",
+  "text":"自己写一段文字"
+}
+还有可以使用char_filter去预处理text
+Get /_analyze
+{
+  "analyzer":"分析器类型",
+  "char_filter": [
+    "html_strip"
+  ],
+  "text":"自己写一段文字"
+}
+
+不明白可以多翻阅:https://cloud.tencent.com/developer/article/1851823,https://hackmd.io/@tienyulin/elasticsearch-analyzer
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+Analyze index disk usage API
+分析索引本地使用情况
+还在开发阶段,需要打个断点
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+Clear cache API
+清理缓存api
+POST /<target>/_cache/clear
+
+POST /_cache/clear
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+Flush API
+刷新索引,将索引提交记录写入磁盘,也就是将translog中的记录同步
+
+POST /<target>/_flush
+
+GET /<target>/_flush
+
+POST /_flush
+
+GET /_flush
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+forcemerge api
+强制合并api,减少segment数量,但是只能合并读权限索引,读写权限的索引会产生大的分段,大小会大于5GB
+在合并过程中,所有的请求都会被阻塞
+POST /<target>/_forcemerge
+
+POST /_forcemerge
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Search API
+搜索api,Returns search hits that match the query defined in the request.
+
+GET /<target>/_search
+
+GET /_search
+
+POST /<target>/_search
+
+POST /_search
+
+请求参数
+analyzer 此参数只能在q参数被指定的情况下使用
+analyze_wildcard 此参数只能在q参数被指定的情况下使用
+batched_reduce_size 立刻减少协调节点上的分片数量.如果请求的潜在分片数量庞大,需要使用这个参数作为安全机制,减少每个请求的占用内存,默认是512
+ccs_minimize_roundtrips 如果为true,协调节点与远程节点之间的网络通讯将最小化
+default_operator 对于查询语句的默认操作是AND 或者 OR,此参数只能在q参数被指定的情况下使用
+df 参数用于当没有字段前缀被给到
+----------关于query_string 的知识可以参考这篇文章https://blog.csdn.net/UbuntuTouch/article/details/103291944
+
+
