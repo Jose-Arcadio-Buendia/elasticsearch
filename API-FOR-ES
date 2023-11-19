@@ -703,4 +703,12 @@ default_operator 对于查询语句的默认操作是AND 或者 OR,此参数只�
 df 参数用于当没有字段前缀被给到
 ----------关于query_string 的知识可以参考这篇文章https://blog.csdn.net/UbuntuTouch/article/details/103291944
 
-
+pre_filter_shard_size 定义一个阈值，在搜索请求包含的分片数量超过阈值后enforces a pre-filter roundtrip to prefilter search shards based on query rewriting
+preference 设置查询节点和分片的权重
+request_cache if true 当查询结果为0 时不缓存
+scroll 滚轮查询
+search_type 如何计算分布式术语频率以及相关性评分 
+    query_then_fetch 计算之后聚合
+    dfs_query_then_fetch 聚合之后计算？
+seq_no_primary_term 如果为true 返回每个命中的序列号以及主要参数
+sort 返回一个逗号分隔的<field>:<direction> 对
