@@ -694,7 +694,7 @@ POST /<target>/_search
 
 POST /_search
 
-请求参数
+请求参数 请求路径后面
 analyzer 此参数只能在q参数被指定的情况下使用
 analyze_wildcard 此参数只能在q参数被指定的情况下使用
 batched_reduce_size 立刻减少协调节点上的分片数量.如果请求的潜在分片数量庞大,需要使用这个参数作为安全机制,减少每个请求的占用内存,默认是512
@@ -704,11 +704,30 @@ df 参数用于当没有字段前缀被给到
 ----------关于query_string 的知识可以参考这篇文章https://blog.csdn.net/UbuntuTouch/article/details/103291944
 
 pre_filter_shard_size 定义一个阈值，在搜索请求包含的分片数量超过阈值后enforces a pre-filter roundtrip to prefilter search shards based on query rewriting
+   搜索过程原先由两个阶段执行（查询阶段和取回阶段）变成三个阶段（新增：预过滤阶段【pre-filter】）
+   ，pre-filter 在查询阶段之前执行。此时发送的 RPC 请求没有超时限制。事实上，_search 请求的 tim
+   eout参数仅在整个分布式搜索的 query 阶段进行检查，并且不包括 PRC 层面，他只在数据节点收到协调节
+   点发来的 RPC 后开始计时，检查 query 过程是否超时。fetch 阶段的 RPC，以及数据节点对 fetch 请求
+   的处理均没有超时检查。
+   协调节点收到客户端的查询请求后，向本次搜索涉及到的全部分片发送RPC请求：indices:data/read/sear
+   ch[can_match]，每个节点收到请求后，判断请求的范围和待查询的分片是否存在交集，返回是或否，然后协
+   调节点跳过不存在交集的分片，向其他分片发送下一阶段（查询阶段）的请求。
+   这次 RPC 请求以 shard 为单位并行发送，没有并发限制。待查询的 shard 有多少个，就并发发送多少个 
+   RPC。然后等待全部 RPC 返回响应。
+
+
 preference 设置查询节点和分片的权重
 request_cache if true 当查询结果为0 时不缓存
 scroll 滚轮查询
 search_type 如何计算分布式术语频率以及相关性评分 
-    query_then_fetch 计算之后聚合
-    dfs_query_then_fetch 聚合之后计算？
+    query_then_fetch 计算之后聚合,获取分片上的得分
+    dfs_query_then_fetch 聚合之后统计得分,两者在理论上结果应该是一致的,而默认的模式查询效率更快
 seq_no_primary_term 如果为true 返回每个命中的序列号以及主要参数
 sort 返回一个逗号分隔的<field>:<direction> 对
+_source 展示在在文档中命中的字段
+   true 返回所有字段
+   false 不返回字段
+   <String> 返回指定字段,并且支持模糊匹配
+_source_excludes
+_source_includes 同上
+stats 
