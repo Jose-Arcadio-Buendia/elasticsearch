@@ -730,4 +730,26 @@ _source 展示在在文档中命中的字段
    <String> 返回指定字段,并且支持模糊匹配
 _source_excludes
 _source_includes 同上
-stats 
+stored_fileds If this field is specified, the _source parameter defaults to false. You can pass _source: true to return both source fields and stored fields in the search response.
+   其实不管你将store设置为ture or false, elasticsearch都将为我们存储这些field, 不同的是：
+      当store为false时(默认配置),这些field只存储在"_source" field中。
+      当store为true时，这些field的value会存储在一个跟 _source 平级的独立的field中。同时也会存储在_source中，所以有两份拷贝。
+   那么什么情况下需要设置store field呢？一般情况有两种情况：
+      _source field在索引的mapping 中disable了。这种情况下，如果不将某个field定义成store=tru
+      e，那些将无法在返回的查询结果中看到这个field。
+      _source的内容非常大。这时候如果我们想要在返回的_source document中解释出某个field的值的话
+      ，开销会很大（当然你也可以定义source filtering将减少network overhead），比如某个documen
+      t中保存的是一本书，所以document中可能有这些field: title, date, content。假如我们只是想
+      查询书的title 跟date信息，而不需要解释整个_source（非常大），这个时候我们可以考虑将title,
+       date这些field设置成store=true。
+suggest_field   指定哪些字段是被建议的
+suggest_mode 建议模式,默认missing
+     always
+     missing
+     popular    
+suggest_size
+suggest_text 以上都是属于suggester api
+
+
+terminate_after 每个分片最大的文档收集数量,如果超过这个值,查询会被终止
+
