@@ -730,6 +730,8 @@ _source 展示在在文档中命中的字段
    <String> 返回指定字段,并且支持模糊匹配
 _source_excludes
 _source_includes 同上
+<<<<<<< HEAD
+stats 按下不表
 stored_fileds If this field is specified, the _source parameter defaults to false. You can pass _source: true to return both source fields and stored fields in the search response.
    其实不管你将store设置为ture or false, elasticsearch都将为我们存储这些field, 不同的是：
       当store为false时(默认配置),这些field只存储在"_source" field中。
@@ -749,7 +751,10 @@ suggest_mode 建议模式,默认missing
      popular    
 suggest_size
 suggest_text 以上都是属于suggester api
-
-
 terminate_after 每个分片最大的文档收集数量,如果超过这个值,查询会被终止
 
+
+请求体
+docvalue_fields 字段匹配规则 如果字段匹配上，则在返回值中的hits.fields字段中展示
+  field 模糊匹配
+  format 展示样式 比如时间格式（“yyyy-MM-dd”），
