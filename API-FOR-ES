@@ -730,7 +730,6 @@ _source 展示在在文档中命中的字段
    <String> 返回指定字段,并且支持模糊匹配
 _source_excludes
 _source_includes 同上
-<<<<<<< HEAD
 stats 按下不表
 stored_fileds If this field is specified, the _source parameter defaults to false. You can pass _source: true to return both source fields and stored fields in the search response.
    其实不管你将store设置为ture or false, elasticsearch都将为我们存储这些field, 不同的是：
@@ -757,4 +756,25 @@ terminate_after 每个分片最大的文档收集数量,如果超过这个值,�
 请求体
 docvalue_fields 字段匹配规则 如果字段匹配上，则在返回值中的hits.fields字段中展示
   field 模糊匹配
-  format 展示样式 比如时间格式（“yyyy-MM-dd”），
+  format 展示样式 比如时间格式（“yyyy-MM-dd”），保留小数点等
+fields 字段匹配规则 如果字段匹配上，则在返回值中的hits.fields字段中展示
+  field 模糊匹配
+  format 展示样式 比如时间格式（“yyyy-MM-dd”），保留小数点等
+stored_fields  A comma-separated list of stored fields to return as part of a hit 
+和docvalue_fields以及 请求fileds完全一样的功能,那让我们来深挖一下这几个字段
+其中stored_fields和docvalue_fields是在lucene中就存在
+stored的内部结构 存储的字段以行方式放置在磁盘中：对于每个文档，我们有一行连续包含所有存储的字段。
+|field0|field1|field2|...|field0|...|
+|Doc a ----------------->|Doc b---->|
+docvalue 文档值以列方式存储。不同文档的相同字段的值一起连续存储在内存中，并且可以“几乎”直接访问
+某个文档的某个字段。计算一个想要的值的地址不是一个简单的操作，它有一个计算成本，但我们可以想象，
+如果我们只想要一个字段，使用这种访问会更有效率。
+如果我们需要每个文档的字段很少，建议使用 Docvalues。另一方面， 当我们想要返回整个文档_source 字
+段是最好的，而 store_field的使用是其他两者之间的完美折衷。在我执行的基准测试场景中， 如果我们只
+需要一个字段， docvalues 的速度几乎是 _source 字段的两倍 ，而在相反的极端情况下，如果我们想返回
+所有字段，图表显示当我们需要时，速度几乎提高了 2倍使用 _source 字段代替 docvalues。
+
+explain 查看计算得分详情 默认为false
+from 开始文档的offset
+indices_boost 从指定节点提高score,反正就是优先查询的意思
+min_score 设置最低得分,小于得分就会被排除在外
