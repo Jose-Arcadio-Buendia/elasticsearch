@@ -778,3 +778,43 @@ explain 查看计算得分详情 默认为false
 from 开始文档的offset
 indices_boost 从指定节点提高score,反正就是优先查询的意思
 min_score 设置最低得分,小于得分就会被排除在外
+----- 2024-01-24 00:30:00 睡不着----
+
+pit 将查询结果限制在某一时间段内.
+  我觉得这个配置非常有意思,从抽象方面说,pit就像mysql里面的视图,但是视图的返回值在一定时间内是固定的
+  固定的配置就是keep-alive,后面跟上时间1m/1h 等.还有一个配置参数是id,在这里要再介绍一个新的api,point in time API.
+  POST /my-index-000001/_pit?keep_alive=1m
+  返回值为id,这个id的值就是我们在此查询请求中,id的内容
+  带有 pit 参数的搜索请求不得指定 index、routing 和 preference，因为这些参数是从时间点复制的
+
+query 马上要开始一次非常精彩的冒险
+      以下是一段非常蹩脚的翻译:
+          Elasticsearch提供了非常丰富的Query DSL(领域特定语言),是一种基于Json定义的语句.这种语言做为抽象语法树的查询的思想,
+          有两种不同的条件类型
+             1.叶子查询条件类型
+                叶子查询就是在一个指定的字段下找到一个指定的值,例如match查询,term查询,range查询
+             2.组合查询条件类型
+                组合查询就是包括了其他叶子查询或者组合查询以及结合复杂的合理的查询,比如bool OR dis_max 查询,或者改变他们的样子,比如constant_score 查询
+
+          查询条件的样子多种多样,这取决于 他们是否 被用于请求内容或者过滤内容
+             3.昂贵的查询
+               The execution of such queries can be prevented by setting the value of the search.allow_expensive_queries setting to false (defaults to true).
+               下面这些查询类型通常会导致执行缓慢,是因为他们使用的方式是那些会影响集群稳定的.  
+               这些查询已经被分类:
+                  需要做线性扫描确认的
+                    1.script query
+                    2.查询花费在数字类型的字段,时间类型的字段,地图点位类型的字段或者keyword字段
+                  需要高的预先资源备用
+                    1.fuzzy 查询
+                    2.regexp 查询
+                    3.prefix 查询
+                    4.wildcard 查询
+                    5.range 查询 作用在text 和 keyword字段上
+                  joining 查询
+                  需要在文档上占用高的查询
+                    1.script_score 查询
+                    2.percolate 查询  
+       
+
+
+
